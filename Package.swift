@@ -1,4 +1,4 @@
-// swift-tools-version: 5.7
+// swift-tools-version: 6.2
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -20,6 +20,8 @@ import PackageDescription
 
 // Common exclusions for all platforms (CMake files, Windows files, etc.)
 var excludedPaths: [String] = [
+	// SwiftPyGit, a target of its own.
+	"Swift",
 	// CMake and build system files
 	"deps/llhttp/CMakeLists.txt",
 	"deps/llhttp/LICENSE-MIT",
@@ -227,8 +229,15 @@ var linkerSettings: [LinkerSetting] = []
 
 let package = Package(
 	name: "libgit2",
+	// SwiftPy's, for SwiftPyGit.
+	platforms: [.iOS(.v26), .macOS(.v26), .visionOS(.v26)],
 	products: [
-		.library(name: "libgit2", targets: ["libgit2"])
+		.library(name: "libgit2", targets: ["libgit2"]),
+		// `pygit2` for SwiftPy, with pygit2's API.
+		.library(name: "SwiftPyGit", targets: ["SwiftPyGit"]),
+	],
+	dependencies: [
+		.package(url: "https://github.com/felfoldy/SwiftPy", from: "0.30.0"),
 	],
 	targets: [
 		.target(
@@ -247,6 +256,17 @@ let package = Package(
 			publicHeadersPath: "include",
 			cSettings: cSettings,
 			linkerSettings: linkerSettings
-		)
+		),
+		.target(
+			name: "SwiftPyGit",
+			dependencies: ["libgit2", "SwiftPy"],
+			path: "Swift/Sources/SwiftPyGit",
+			resources: [.copy("pygit2.py")]
+		),
+		.testTarget(
+			name: "SwiftPyGitTests",
+			dependencies: ["SwiftPyGit"],
+			path: "Swift/Tests/SwiftPyGitTests"
+		),
 	]
 )
