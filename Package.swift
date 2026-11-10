@@ -96,9 +96,8 @@ var cSettings: [CSetting] = [
 	.define("MAX_NAME_SIZE", to: "32"),
 	.define("MAX_NAME_COUNT", to: "10000"),
 
-	// SSH transport (exec-based, uses system ssh command)
-	.define("GIT_SSH", to: "1", .when(platforms: [.macOS, .iOS, .linux, .android])),
-	.define("GIT_SSH_EXEC", to: "1", .when(platforms: [.macOS, .iOS, .linux, .android])),
+	// No SSH transport: the exec-based one starts the system `ssh`, which an
+	// iOS app can't and a sandboxed Mac app can't give keys to. HTTPS only.
 
 	// HTTP configuration
 	.define("GIT_HTTPS", to: "1"),
