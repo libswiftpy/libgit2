@@ -35,15 +35,15 @@ public enum SwiftPyGit {
                 }
             }
 
-            module.def("clone(url: str, path: str, bare: bool, checkout_branch: str | None, callbacks: object) -> Repo") { argc, argv in
-                PyBind.blocking(argc, argv) { (url: String, path: String, bare: Bool, branch: String?, callbacks: PyObject?) in
-                    try await Network.clone(url: url, path: path, bare: bare, checkoutBranch: branch, callbacks: callbacks)
+            module.def("clone(url: str, path: str, bare: bool, checkout_branch: str | None, depth: int, callbacks: object) -> Repo") { argc, argv in
+                PyBind.blocking(argc, argv) { (url: String, path: String, bare: Bool, branch: String?, depth: Int, callbacks: PyObject?) in
+                    try await Network.clone(url: url, path: path, bare: bare, checkoutBranch: branch, depth: depth, callbacks: callbacks)
                 }
             }
 
-            module.def("fetch(repo: Repo, remote: str, refspecs: list[str] | None, callbacks: object) -> str") { argc, argv in
-                PyBind.blocking(argc, argv) { (repo: Repo, remote: String, refspecs: [String]?, callbacks: PyObject?) in
-                    try await Network.fetch(repo: repo, remote: remote, refspecs: refspecs, callbacks: callbacks)
+            module.def("fetch(repo: Repo, remote: str, refspecs: list[str] | None, prune: int, depth: int, callbacks: object) -> str") { argc, argv in
+                PyBind.blocking(argc, argv) { (repo: Repo, remote: String, refspecs: [String]?, prune: Int, depth: Int, callbacks: PyObject?) in
+                    try await Network.fetch(repo: repo, remote: remote, refspecs: refspecs, prune: prune, depth: depth, callbacks: callbacks)
                 }
             }
 

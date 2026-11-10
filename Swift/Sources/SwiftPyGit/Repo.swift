@@ -73,6 +73,34 @@ final class Repo {
         return hex(git_object_id(peeled)!)
     }
 
+    /// The object's raw content, of any type, as the object database stores it.
+    func readRaw(_ id: String) throws(PythonError) -> Data {
+        var target = try oid(id)
+        var odb: OpaquePointer?
+        try check(git_repository_odb(&odb, pointer))
+        defer { git_odb_free(odb) }
+        var object: OpaquePointer?
+        try check(git_odb_read(&object, odb, &target), notFound: id)
+        defer { git_odb_object_free(object) }
+        let size = git_odb_object_size(object)
+        guard size > 0, let bytes = git_odb_object_data(object) else { return Data() }
+        return Data(bytes: bytes, count: size)
+    }
+
+    /// Creates an annotated tag of the object `target` and returns the tag's id.
+    /// The tagger is JSON with name, email, time and offset.
+    func createTag(_ name: String, _ target: String, _ tagger: String, _ message: String, _ force: Bool) throws(PythonError) -> String {
+        var targetId = try oid(target)
+        var object: OpaquePointer?
+        try check(git_object_lookup(&object, pointer, &targetId, GIT_OBJECT_ANY), notFound: target)
+        defer { git_object_free(object) }
+        let signature = try signature(tagger)
+        defer { git_signature_free(signature) }
+        var id = git_oid()
+        try check(git_tag_create(&id, pointer, name, object, signature, message, force ? 1 : 0))
+        return hex(id)
+    }
+
     /// A blob's bytes.
     func blobData(_ id: String) throws(PythonError) -> Data {
         var target = try oid(id)
@@ -330,12 +358,27 @@ final class Repo {
         return ids
     }
 
-    /// Path to FileStatus flags, untracked files included, ignored ones left out.
-    func status() throws(PythonError) -> [String: Int] {
+    /// Path to FileStatus flags. `untracked` is pygit2's "all" (files inside
+    /// untracked folders too), "normal" (the folders) or "no".
+    func status(_ untracked: String, _ ignored: Bool) throws(PythonError) -> [String: Int] {
         var options = git_status_options()
         git_status_options_init(&options, UInt32(GIT_STATUS_OPTIONS_VERSION))
         options.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR
-        options.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED.rawValue | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS.rawValue
+        var flags: UInt32 = 0
+        switch untracked {
+        case "all":
+            flags |= GIT_STATUS_OPT_INCLUDE_UNTRACKED.rawValue | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS.rawValue
+        case "normal":
+            flags |= GIT_STATUS_OPT_INCLUDE_UNTRACKED.rawValue
+        case "no":
+            break
+        default:
+            throw .ValueError("untracked_files must be 'all', 'normal' or 'no', not '\(untracked)'")
+        }
+        if ignored {
+            flags |= GIT_STATUS_OPT_INCLUDE_IGNORED.rawValue
+        }
+        options.flags = flags
         var list: OpaquePointer?
         try check(git_status_list_new(&list, pointer, &options))
         defer { git_status_list_free(list) }
@@ -355,8 +398,9 @@ final class Repo {
         return Int(flags)
     }
 
-    /// Checks out the tree `refname` points at and moves HEAD to it; with no
-    /// name, the index and working tree are made to match HEAD.
+    /// Checks out the tree the reference `refname` points at and moves HEAD to
+    /// it; with no name, the index and working tree are made to match HEAD. The
+    /// reference is looked up first, so a wrong name changes nothing.
     func checkout(_ refname: String?, _ strategy: Int) throws(PythonError) {
         var options = git_checkout_options()
         git_checkout_options_init(&options, UInt32(GIT_CHECKOUT_OPTIONS_VERSION))
@@ -365,11 +409,30 @@ final class Repo {
             try check(git_checkout_head(pointer, &options))
             return
         }
-        var object: OpaquePointer?
-        try check(git_revparse_single(&object, pointer, refname), notFound: refname)
-        defer { git_object_free(object) }
-        try check(git_checkout_tree(pointer, object, &options))
-        try setHead(refname)
+        var reference: OpaquePointer?
+        try check(git_reference_lookup(&reference, pointer, refname), notFound: refname)
+        defer { git_reference_free(reference) }
+        var commit: OpaquePointer?
+        try check(git_reference_peel(&commit, reference, GIT_OBJECT_COMMIT))
+        defer { git_object_free(commit) }
+        try check(git_checkout_tree(pointer, commit, &options))
+        try check(git_repository_set_head(pointer, refname))
+    }
+
+    /// Whether git would ignore `path`.
+    func pathIsIgnored(_ path: String) throws(PythonError) -> Bool {
+        var ignored: Int32 = 0
+        try check(git_ignore_path_is_ignored(&ignored, pointer, path))
+        return ignored == 1
+    }
+
+    /// Whether the commit `id` has `ancestor` in its history.
+    func descendantOf(_ id: String, _ ancestor: String) throws(PythonError) -> Bool {
+        var commit = try oid(id)
+        var base = try oid(ancestor)
+        let result = git_graph_descendant_of(pointer, &commit, &base)
+        try check(result)
+        return result == 1
     }
 
     /// Resets HEAD to `id`, the index and working tree too for MIXED and HARD.
@@ -547,6 +610,25 @@ final class Repo {
 
     func deleteRemote(_ name: String) throws(PythonError) {
         try check(git_remote_delete(pointer, name), notFound: name)
+    }
+
+    /// The remote's fetch refspecs, or its push ones.
+    func remoteRefspecs(_ name: String, _ push: Bool) throws(PythonError) -> [String] {
+        var remote: OpaquePointer?
+        try check(git_remote_lookup(&remote, pointer, name), notFound: name)
+        defer { git_remote_free(remote) }
+        var array = git_strarray()
+        try check(push ? git_remote_get_push_refspecs(&array, remote) : git_remote_get_fetch_refspecs(&array, remote))
+        defer { git_strarray_dispose(&array) }
+        return strings(of: array)
+    }
+
+    /// The remote a remote-tracking branch belongs to; raises for a local one.
+    func branchRemoteName(_ referenceName: String) throws(PythonError) -> String {
+        var buffer = git_buf()
+        defer { git_buf_dispose(&buffer) }
+        try check(git_branch_remote_name(&buffer, pointer, referenceName), notFound: referenceName)
+        return optionalString(buffer.ptr) ?? ""
     }
 
     func setRemoteUrl(_ name: String, _ url: String) throws(PythonError) {

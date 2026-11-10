@@ -12,7 +12,7 @@ import SwiftPy
 /// the `pygit2.RemoteCallbacks` on main, which holds the GIL.
 @MainActor
 enum Network {
-    static func clone(url: String, path: String, bare: Bool, checkoutBranch: String?, callbacks: PyObject?) async throws(PythonError) -> Repo {
+    static func clone(url: String, path: String, bare: Bool, checkoutBranch: String?, depth: Int, callbacks: PyObject?) async throws(PythonError) -> Repo {
         try refuseSSH(url)
         let localPath = Path(path).url.path
         let context = CallbackContext(callbacks: callbacks)
@@ -20,26 +20,30 @@ enum Network {
             var options = git_clone_options()
             git_clone_options_init(&options, UInt32(GIT_CLONE_OPTIONS_VERSION))
             options.bare = bare ? 1 : 0
+            options.fetch_opts.depth = Int32(depth)
             context.install(in: &options.fetch_opts.callbacks)
             var out: OpaquePointer?
             let status = withOptionalCString(checkoutBranch) { branch in
                 options.checkout_branch = branch
                 return git_clone(&out, url, localPath, &options)
             }
+            context.recordFailure(status)
             return (status, SendablePointer(out))
         }.value
         try context.finish(status)
-        guard let repository = pointer.value else { throw gitError(status) }
+        guard let repository = pointer.value else { throw gitError(status, message: context.workerMessage) }
         return Repo(pointer: repository)
     }
 
     /// Fetches and returns the transfer's statistics as JSON.
-    static func fetch(repo: Repo, remote name: String, refspecs: [String]?, callbacks: PyObject?) async throws(PythonError) -> String {
+    static func fetch(repo: Repo, remote name: String, refspecs: [String]?, prune: Int, depth: Int, callbacks: PyObject?) async throws(PythonError) -> String {
         let remote = try lookup(remote: name, in: repo)
         let context = CallbackContext(callbacks: callbacks)
         let (status, stats) = await Task.detached {
             var options = git_fetch_options()
             git_fetch_options_init(&options, UInt32(GIT_FETCH_OPTIONS_VERSION))
+            options.prune = git_fetch_prune_t(rawValue: UInt32(prune))
+            options.depth = Int32(depth)
             context.install(in: &options.callbacks)
             let status: Int32
             if let refspecs {
@@ -47,6 +51,7 @@ enum Network {
             } else {
                 status = git_remote_fetch(remote.value, nil, &options, nil)
             }
+            context.recordFailure(status)
             let stats = git_remote_stats(remote.value).map { stats in
                 [
                     "total_objects": Int(stats.pointee.total_objects),
@@ -73,6 +78,7 @@ enum Network {
             git_push_options_init(&options, UInt32(GIT_PUSH_OPTIONS_VERSION))
             context.install(in: &options.callbacks)
             let status = (try? withStrarray(specs) { array in git_remote_push(remote.value, array, &options) }) ?? -1
+            context.recordFailure(status)
             git_remote_free(remote.value)
             return status
         }.value
@@ -113,6 +119,8 @@ final class CallbackContext: @unchecked Sendable {
     private let callbacks: PyObject?
     private var error: PythonError?
     private var credentialAttempts = 0
+    /// libgit2's message, read on the worker thread that failed.
+    private(set) var workerMessage: String?
 
     init(callbacks: PyObject?) {
         self.callbacks = callbacks
@@ -127,10 +135,16 @@ final class CallbackContext: @unchecked Sendable {
         }
     }
 
+    /// On the worker thread, keeps libgit2's message for a failure, which it
+    /// holds per thread.
+    func recordFailure(_ status: Int32) {
+        if status < 0 { workerMessage = lastGitErrorMessage() }
+    }
+
     /// Rethrows what a callback raised, else libgit2's own error.
     func finish(_ status: Int32) throws(PythonError) {
         if let error { throw error }
-        try check(status)
+        if status < 0 { throw gitError(status, message: workerMessage) }
     }
 
     fileprivate func fail(_ error: PythonError) -> Int32 {

@@ -12,18 +12,28 @@ let libgit2Initialized: Bool = {
     git_libgit2_init() >= 0
 }()
 
-/// What a failed libgit2 call raises, as pygit2 does: a missing object or
-/// reference is a `KeyError`, a malformed name a `ValueError`, the rest a
-/// `GitError`.
-func gitError(_ status: Int32, notFound: String? = nil) -> PythonError {
-    let message = git_error_last().flatMap { error in
+/// libgit2's message for the last failure on this thread; it keeps one per thread.
+func lastGitErrorMessage() -> String? {
+    git_error_last().flatMap { error in
         error.pointee.message.map { String(cString: $0) }
-    } ?? "libgit2 error \(status)"
+    }.flatMap { $0 == "no error" ? nil : $0 }
+}
+
+/// What a failed libgit2 call raises, as pygit2 does: a missing object or
+/// reference is a `KeyError`, an existing one `AlreadyExistsError`, a malformed
+/// name `InvalidSpecError`, the rest a `GitError`. Work done on another thread
+/// passes the `message` it read there.
+func gitError(_ status: Int32, notFound: String? = nil, message: String? = nil) -> PythonError {
+    let message = message ?? lastGitErrorMessage() ?? "libgit2 error \(status)"
 
     switch git_error_code(rawValue: status) {
     case GIT_ENOTFOUND:
         return .KeyError(notFound ?? message)
-    case GIT_EINVALIDSPEC, GIT_EAMBIGUOUS:
+    case GIT_EEXISTS:
+        return PythonError(type: "pygit2.AlreadyExistsError", value: message)
+    case GIT_EINVALIDSPEC:
+        return PythonError(type: "pygit2.InvalidSpecError", value: message)
+    case GIT_EAMBIGUOUS:
         return .ValueError(message)
     default:
         if message.localizedCaseInsensitiveContains("unsupported URL protocol") {

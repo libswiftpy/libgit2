@@ -150,6 +150,92 @@ struct PyGit2Tests {
         #expect(result == "([1, 'me', 'token'], [1, 'git', 'https://host/repo'], None)")
     }
 
+    @Test func aWrongCheckoutNameChangesNothing() async {
+        let result = await run(twoCommits + "\n" + """
+        repo.branches.local.create("feature", repo[first])
+        try:
+            repo.checkout("feature")
+            raised = None
+        except Exception as error:
+            raised = type(error).__name__
+        text = open(os.path.join(repo.workdir, "hello.txt")).read()
+        _result = (raised, text, repo.status(), repo.head.shorthand)
+        """)
+        #expect(result == "('InvalidSpecError', 'hello, world\\n', {}, 'main')")
+    }
+
+    @Test func statusFollowsItsArguments() async {
+        let result = await run(twoCommits + "\n" + """
+        os.makedirs(os.path.join(repo.workdir, "build"))
+        open(os.path.join(repo.workdir, "build", "out.o"), "w").close()
+        os.makedirs(os.path.join(repo.workdir, "docs"))
+        open(os.path.join(repo.workdir, "docs", "a.md"), "w").close()
+        with open(os.path.join(repo.workdir, ".gitignore"), "w") as file:
+            file.write("build/\\n")
+        _result = (
+            sorted(repo.status()), sorted(repo.status(untracked_files="normal")),
+            sorted(repo.status(untracked_files="no")), sorted(repo.status(ignored=True)),
+            repo.path_is_ignored("build/out.o"), repo.path_is_ignored("docs/a.md"),
+        )
+        """)
+        #expect(result == "(['.gitignore', 'docs/a.md'], ['.gitignore', 'docs/'], [], ['.gitignore', 'build/', 'docs/a.md'], True, False)")
+    }
+
+    @Test func fetchPrunesAndNetworkErrorsKeepTheirMessage() async {
+        let result = await run(twoCommits + "\n" + """
+        bare = pygit2.clone_repository("file://" + repo.path, os.path.join(root, "bare.git"), bare=True)
+        bare.branches.local.create("gone", bare[bare.head.target])
+        copy = pygit2.clone_repository("file://" + bare.path, os.path.join(root, "copy"))
+        had = "origin/gone" in copy.branches.remote
+        bare.branches.local.delete("gone")
+        copy.remotes["origin"].fetch(prune=pygit2.enums.FetchPrune.PRUNE)
+        try:
+            pygit2.clone_repository("file://" + os.path.join(root, "nowhere"), os.path.join(root, "x"))
+            message = None
+        except pygit2.GitError as error:
+            message = str(error)
+        _result = (
+            had, "origin/gone" in copy.branches.remote, bool(message) and message != "no error",
+            copy.remotes["origin"].fetch_refspecs, copy.branches.remote["origin/main"].remote_name,
+        )
+        """)
+        #expect(result == "(True, False, True, ['+refs/heads/*:refs/remotes/origin/*'], 'origin')")
+    }
+
+    @Test func behavesAsPygit2InTheDetails() async {
+        let result = await run("""
+        empty = pygit2.init_repository(os.path.join(root, "empty"), initial_head="main")
+        try:
+            empty.head
+            unborn = None
+        except pygit2.GitError as error:
+            unborn = str(error)
+        """ + "\n" + twoCommits + "\n" + """
+        errors = []
+        for attempt in (
+            lambda: repo.branches.local.create("main", repo[first]),
+            lambda: repo.references.create("refs/heads/bad..name", first),
+            lambda: repo.branches.local["main"].remote_name,
+        ):
+            try:
+                attempt()
+                errors.append(None)
+            except Exception as error:
+                errors.append(type(error).__name__)
+        tag = repo.create_tag("v1", second, pygit2.enums.ObjectType.COMMIT, me, "First release")
+        peeled = repo.references["refs/tags/v1"].peel()
+        repo.branches.local.create("old", repo[first])
+        now = pygit2.Signature("Ada", "ada@example.com")
+        _result = (
+            unborn, errors, type(peeled).__name__, peeled.id == second,
+            repo[second].read_raw().startswith(b"tree "), now.time > 1_700_000_000,
+            repo.descendant_of(second, first), sorted(repo.branches.with_commit(second)),
+            repo.listall_branches(), [r.name for r in repo.references.objects if r.name.startswith("refs/tags")],
+        )
+        """)
+        #expect(result == "(\"reference 'refs/heads/main' not found\", ['AlreadyExistsError', 'InvalidSpecError', 'GitError'], 'Commit', True, True, True, True, ['main'], ['main', 'old'], ['refs/tags/v1'])")
+    }
+
     /// pygit2's own recipes, as its documentation writes them.
     @Test func pygit2RecipesRunUnchanged() async {
         let result = await run(twoCommits + "\n" + """
