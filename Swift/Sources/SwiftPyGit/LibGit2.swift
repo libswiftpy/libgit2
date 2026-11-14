@@ -71,7 +71,8 @@ func refuseSSH(_ url: String) throws(PythonError) {
 func hex(_ oid: UnsafePointer<git_oid>) -> String {
     var buffer = [CChar](repeating: 0, count: Int(GIT_OID_MAX_HEXSIZE) + 1)
     git_oid_tostr(&buffer, buffer.count, oid)
-    return String(cString: buffer)
+    let bytes = buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+    return String(decoding: bytes, as: UTF8.self)
 }
 
 func hex(_ oid: git_oid) -> String {
