@@ -2,13 +2,13 @@
 
 Read history, sync with remotes over HTTPS and commit, with the names pygit2
 uses, so its examples run as written. SSH isn't available: use an HTTPS URL
-with a token, which ``keychain`` can keep.
+with a token, from ``github.sign_in()`` or one kept in ``keychain``, such as
+`pygit2.UserPass("x-access-token", keychain.secret("GITHUB_TOKEN"))`.
 
 ```python
-import pygit2, keychain
+import pygit2, github
 
-token = keychain.secret("GITHUB_TOKEN")
-callbacks = pygit2.RemoteCallbacks(credentials=pygit2.UserPass("x-access-token", token))
+callbacks = pygit2.RemoteCallbacks(credentials=github.credentials())
 repo = pygit2.clone_repository("https://github.com/owner/project", "project", callbacks=callbacks)
 
 for commit in repo.walk(repo.head.target, pygit2.enums.SortMode.TIME):

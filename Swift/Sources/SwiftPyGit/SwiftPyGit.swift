@@ -12,7 +12,9 @@ import SwiftPy
 /// `pygit2.py` over the native `_pygit2`.
 @MainActor
 public enum SwiftPyGit {
-    public static func initialize() {
+    /// signInWithGitHub: Whether `github.sign_in()` is offered; it needs
+    /// ``GitHubAccount/clientID`` and ``GitHubAccount/clientSecret``. A token already saved is used either way.
+    public static func initialize(signInWithGitHub: Bool = false) {
         precondition(libgit2Initialized)
 
         PyBind.module("_pygit2", docs: "libgit2 for the pygit2 module; use pygit2 instead.") { module in
@@ -55,5 +57,45 @@ public enum SwiftPyGit {
         }
 
         PyBind.module("pygit2", in: .module)
+        bindGitHub(signsIn: signInWithGitHub)
+    }
+
+    private static func bindGitHub(signsIn: Bool) {
+        PyBind.module("_github", docs: "GitHub sign-in for the github module; use github instead.") { module in
+            if signsIn {
+                module.def(
+                    "sign_in() -> str",
+                    docstring: """
+                    Signs in to GitHub in the browser and returns the account's login.
+
+                    It asks for access to your repositories, public and private. The \
+                    token is saved in the keychain as GITHUB_TOKEN.
+                    """
+                ) { argc, argv in
+                    PyBind.blocking(argc, argv) {
+                        try await GitHubAccount.shared.signIn()
+                    }
+                }
+            }
+            module.def(
+                "create_repository(name: str, private: bool) -> str",
+                docstring: "Creates an empty repository on the signed-in account; returns its HTTPS clone URL."
+            ) { argc, argv in
+                PyBind.blocking(argc, argv) { (name: String, isPrivate: Bool) in
+                    try await GitHubAccount.shared.createRepository(name: name, isPrivate: isPrivate)
+                }
+            }
+            module.def("sign_out() -> None", docstring: "Signs out of GitHub, deleting the GITHUB_TOKEN secret.") { argc, argv in
+                PyBind.function(argc, argv) { () throws(PythonError) in
+                    try GitHubAccount.shared.signOut()
+                }
+            }
+            module.def("account() -> str | None", docstring: "The signed-in GitHub login, or None when signed out.") { argc, argv in
+                PyBind.function(argc, argv) {
+                    GitHubAccount.shared.login
+                }
+            }
+        }
+        PyBind.module("github", in: .module)
     }
 }

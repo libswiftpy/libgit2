@@ -261,7 +261,7 @@ let package = Package(
 			name: "SwiftPyGit",
 			dependencies: ["libgit2", "SwiftPy"],
 			path: "Swift/Sources/SwiftPyGit",
-			resources: [.copy("pygit2.py")]
+			resources: [.copy("pygit2.py"), .copy("github.py")]
 		),
 		.testTarget(
 			name: "SwiftPyGitTests",
