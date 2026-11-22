@@ -20,9 +20,11 @@ final class MockGitHub: URLProtocol, @unchecked Sendable {
 
     override func startLoading() {
         let path = request.url?.path ?? ""
-        if let body = bodyData() {
-            var components = URLComponents()
-            components.percentEncodedQuery = String(decoding: body, as: UTF8.self)
+        // Only a form body: setting percentEncodedQuery to JSON, as creating a
+        // repository sends, traps; URLComponents(string:) returns nil instead.
+        if request.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded",
+           let body = bodyData(),
+           let components = URLComponents(string: "?" + String(decoding: body, as: UTF8.self)) {
             Self.forms[path] = Dictionary((components.queryItems ?? []).map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { a, _ in a })
         }
         let (status, text) = Self.replies[path] ?? (404, "")
