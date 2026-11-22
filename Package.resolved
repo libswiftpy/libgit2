@@ -1,6 +1,15 @@
 {
-  "originHash" : "d70cce86ff9400a13572146132ce6d84e10307ac9eb594ef2262937c54c7d1fd",
+  "originHash" : "63c4aa9dd1d321128048b2a6c027ccfe7400a8a9bc36d3183f2409c8b785833b",
   "pins" : [
+    {
+      "identity" : "cpython",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/libswiftpy/cpython.git",
+      "state" : {
+        "revision" : "317a918b3591e1d6643a7ff96011720ba491e2f5",
+        "version" : "3.15.0-swiftpy.1"
+      }
+    },
     {
       "identity" : "swift-syntax",
       "kind" : "remoteSourceControl",
@@ -8,6 +17,15 @@
       "state" : {
         "revision" : "f99ae8aa18f0cf0d53481901f88a0991dc3bd4a2",
         "version" : "601.0.1"
+      }
+    },
+    {
+      "identity" : "swiftpy",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/felfoldy/SwiftPy",
+      "state" : {
+        "revision" : "f0253404f3d211ae2bf7be5abec1e7fad97cc243",
+        "version" : "0.30.0"
       }
     }
   ],

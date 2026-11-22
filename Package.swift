@@ -25,11 +25,11 @@ var excludedPaths: [String] = [
 	// CMake and build system files
 	"deps/llhttp/CMakeLists.txt",
 	"deps/llhttp/LICENSE-MIT",
-	"deps/pcre/CMakeLists.txt",
-	"deps/pcre/COPYING",
-	"deps/pcre/LICENCE",
-	"deps/pcre/cmake/",
-	"deps/pcre/config.h.in",
+	"deps/pcre2/CMakeLists.txt",
+	"deps/pcre2/LICENCE.md",
+	"deps/pcre2/config.h.in",
+	// Not in pcre2's own CMake sources.
+	"deps/pcre2/pcre2_fuzzsupport.c",
 	"deps/xdiff/CMakeLists.txt",
 	"deps/zlib/CMakeLists.txt",
 	"deps/zlib/LICENSE",
@@ -67,7 +67,7 @@ var excludedPaths: [String] = [
 var cSettings: [CSetting] = [
 	// Header search paths
 	.headerSearchPath("deps/llhttp"),
-	.headerSearchPath("deps/pcre"),
+	.headerSearchPath("deps/pcre2"),
 	.headerSearchPath("deps/xdiff"),
 	.headerSearchPath("deps/zlib"),
 	.headerSearchPath("deps/ntlmclient"),
@@ -80,22 +80,30 @@ var cSettings: [CSetting] = [
 	.define("GIT_THREADS_PTHREADS", to: "1"),
 	.define("GIT_ARCH_64", to: "1"),
 
-	// PCRE regex configuration (builtin)
+	// PCRE2 regex configuration (builtin), as deps/pcre2/CMakeLists.txt sets
+	// it; defined here instead of a generated config.h.
 	.define("GIT_REGEX_BUILTIN", to: "1"),
-	.define("SUPPORT_PCRE8", to: "1"),
-	.define("HAVE_STDINT_H", to: "1"),
-	.define("HAVE_INTTYPES_H", to: "1"),
-	.define("HAVE_MEMMOVE", to: "1"),
-	.define("HAVE_STRERROR", to: "1"),
+	.define("PCRE2_CODE_UNIT_WIDTH", to: "8"),
+	.define("PCRE2_STATIC", to: "1"),
+	.define("PCRE2_EXPORT", to: ""),
+	.define("SUPPORT_PCRE2_8", to: "1"),
+	.define("SUPPORT_UNICODE", to: "1"),
+	.define("HAVE_ASSERT_H", to: "1"),
+	.define("HAVE_SYS_STAT_H", to: "1"),
+	.define("HAVE_SYS_TYPES_H", to: "1"),
+	.define("HAVE_UNISTD_H", to: "1"),
+	.define("HAVE_DIRENT_H", to: "1"),
+	.define("HAVE_BUILTIN_MUL_OVERFLOW", to: "1"),
+	.define("HAVE_BUILTIN_UNREACHABLE", to: "1"),
+	.define("HAVE_ATTRIBUTE_UNINITIALIZED", to: "1"),
 	.define("LINK_SIZE", to: "2"),
-	.define("PARENS_NEST_LIMIT", to: "250"),
+	.define("HEAP_LIMIT", to: "20000000"),
 	.define("MATCH_LIMIT", to: "10000000"),
-	.define("MATCH_LIMIT_RECURSION", to: "10000000"),
-	.define("NEWLINE", to: "10"),  // LF
-	.define("NO_RECURSE", to: "1"),
-	.define("POSIX_MALLOC_THRESHOLD", to: "10"),
-	.define("BSR_ANYCRLF", to: "0"),
-	.define("MAX_NAME_SIZE", to: "32"),
+	.define("MATCH_LIMIT_DEPTH", to: "MATCH_LIMIT"),
+	.define("MAX_VARLOOKBEHIND", to: "255"),
+	.define("NEWLINE_DEFAULT", to: "2"),  // LF
+	.define("PARENS_NEST_LIMIT", to: "250"),
+	.define("MAX_NAME_SIZE", to: "128"),
 	.define("MAX_NAME_COUNT", to: "10000"),
 
 	// No SSH transport: the exec-based one starts the system `ssh`, which an
@@ -246,7 +254,7 @@ let package = Package(
 			exclude: excludedPaths,
 			sources: [
 				"deps/llhttp",
-				"deps/pcre",
+				"deps/pcre2",
 				"deps/xdiff",
 				"deps/zlib",
 				"deps/ntlmclient",

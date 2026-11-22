@@ -201,6 +201,9 @@ extern void git_indexwriter_cleanup(git_indexwriter *writer);
 
 #ifndef GIT_EXPERIMENTAL_SHA256
 
+/* If the path is conflicted, move it from the index to reuc. */
+int git_index__conflict_to_reuc(git_index *index, const char *path);
+
 int git_index_open_ext(
 	git_index **index_out,
 	const char *index_path,
