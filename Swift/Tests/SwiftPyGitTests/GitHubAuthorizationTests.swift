@@ -75,7 +75,7 @@ struct GitHubAuthorizationTests {
         #expect(url.host == "github.com")
         #expect(query["client_id"] == "client")
         #expect(query["redirect_uri"] == "pyprompt://oauth/github")
-        #expect(query["scope"] == "repo")
+        #expect(query["scope"] == "repo read:org")
         #expect(query["state"] == attempt.state)
         #expect(query["code_challenge"] == attempt.challenge)
         #expect(query["code_challenge_method"] == "S256")
@@ -125,6 +125,18 @@ struct GitHubAuthorizationTests {
         MockGitHub.replies["/user/repos"] = (201, #"{"name":"demo","clone_url":"https://github.com/octocat/demo.git"}"#)
         let url = try await GitHubAuthorization.createRepository(name: "demo", isPrivate: true, token: "gho_token", session: MockGitHub.session)
         #expect(url == "https://github.com/octocat/demo.git")
+    }
+
+    @Test func createsOneInAnOrganization() async throws {
+        MockGitHub.replies["/orgs/pyprompt/repos"] = (201, #"{"name":"demo","clone_url":"https://github.com/pyprompt/demo.git"}"#)
+        let url = try await GitHubAuthorization.createRepository(name: "demo", isPrivate: false, owner: "pyprompt", token: "gho_token", session: MockGitHub.session)
+        #expect(url == "https://github.com/pyprompt/demo.git")
+    }
+
+    @Test func listsTheOrganizations() async throws {
+        MockGitHub.replies["/user/orgs"] = (200, #"[{"login":"pyprompt","id":1},{"login":"swiftpy","id":2}]"#)
+        let organizations = try await GitHubAuthorization.organizations(token: "gho_token", session: MockGitHub.session)
+        #expect(organizations == ["pyprompt", "swiftpy"])
     }
 
     @Test func aTakenNameIsAClearError() async throws {

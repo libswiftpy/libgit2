@@ -78,11 +78,16 @@ public enum SwiftPyGit {
                 }
             }
             module.def(
-                "create_repository(name: str, private: bool) -> str",
-                docstring: "Creates an empty repository on the signed-in account; returns its HTTPS clone URL."
+                "create_repository(name: str, private: bool, owner: str | None) -> str",
+                docstring: "Creates an empty repository on the signed-in account, or in the organization owner; returns its HTTPS clone URL."
             ) { argc, argv in
-                PyBind.blocking(argc, argv) { (name: String, isPrivate: Bool) in
-                    try await GitHubAccount.shared.createRepository(name: name, isPrivate: isPrivate)
+                PyBind.blocking(argc, argv) { (name: String, isPrivate: Bool, owner: String?) in
+                    try await GitHubAccount.shared.createRepository(name: name, isPrivate: isPrivate, owner: owner)
+                }
+            }
+            module.def("organizations() -> list[str]", docstring: "The signed-in account's organizations.") { argc, argv in
+                PyBind.blocking(argc, argv) {
+                    try await GitHubAccount.shared.organizations()
                 }
             }
             module.def("sign_out() -> None", docstring: "Signs out of GitHub, deleting the GITHUB_TOKEN secret.") { argc, argv in

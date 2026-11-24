@@ -16,7 +16,7 @@ import _github
 import keychain
 from _github import account, sign_out
 
-__all__ = ["account", "create_repository", "credentials", "sign_out", "token"]
+__all__ = ["account", "create_repository", "credentials", "organizations", "sign_out", "token"]
 
 # Bound only where signing in is offered.
 if hasattr(_github, "sign_in"):
@@ -25,14 +25,25 @@ if hasattr(_github, "sign_in"):
     __all__ += ["sign_in"]
 
 
-def create_repository(name: str, private: bool = True) -> str:
+def create_repository(name: str, private: bool = True, owner: str | None = None) -> str:
     """Creates an empty repository on the signed-in account and returns its
     HTTPS URL, to add as a remote and push to.
 
     name: The repository's name.
     private: Whether only you, and those you invite, can see it. Defaults to True.
+    owner: An organization to create it in, one of `organizations()`. Defaults
+        to your own account.
     """
-    return _github.create_repository(name, private)
+    return _github.create_repository(name, private, owner)
+
+
+def organizations() -> list[str]:
+    """The organizations of the signed-in account, by login.
+
+    An organization that restricts third-party apps lists only once its owner
+    approves PyPrompt; signing in again may be needed to list any.
+    """
+    return _github.organizations()
 
 
 def token() -> keychain.Secret:

@@ -65,10 +65,17 @@ public final class GitHubAccount {
         return login
     }
 
-    /// Creates an empty repository on the signed-in account; returns its HTTPS clone URL.
-    public func createRepository(name: String, isPrivate: Bool) async throws -> String {
+    /// Creates an empty repository on the signed-in account, or in `owner`, an
+    /// organization; returns its HTTPS clone URL.
+    public func createRepository(name: String, isPrivate: Bool, owner: String? = nil) async throws -> String {
         guard let token = Secret(name: Self.tokenName).value else { throw GitHubSignInError.notSignedIn }
-        return try await GitHubAuthorization.createRepository(name: name, isPrivate: isPrivate, token: token, session: session)
+        return try await GitHubAuthorization.createRepository(name: name, isPrivate: isPrivate, owner: owner, token: token, session: session)
+    }
+
+    /// The signed-in account's organizations.
+    public func organizations() async throws -> [String] {
+        guard let token = Secret(name: Self.tokenName).value else { throw GitHubSignInError.notSignedIn }
+        return try await GitHubAuthorization.organizations(token: token, session: session)
     }
 
     public func signOut() throws(PythonError) {

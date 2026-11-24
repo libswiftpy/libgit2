@@ -13,7 +13,8 @@ enum GitHubAuthorization {
     static let authorizeURL = URL(string: "https://github.com/login/oauth/authorize")!
     static let tokenURL = URL(string: "https://github.com/login/oauth/access_token")!
     static let userURL = URL(string: "https://api.github.com/user")!
-    static let scope = "repo"
+    // read:org lists the organizations Publish offers.
+    static let scope = "repo read:org"
 
     /// One attempt's secrets, fresh each time.
     struct Attempt {
@@ -116,6 +117,21 @@ enum GitHubAuthorization {
 
 extension GitHubAuthorization {
     static let repositoriesURL = URL(string: "https://api.github.com/user/repos")!
+    static let organizationsURL = URL(string: "https://api.github.com/user/orgs?per_page=100")!
+
+    private struct Organization: Decodable { let login: String }
+
+    /// The organizations the token may act in; empty for a token from before read:org.
+    static func organizations(token: String, session: URLSession) async throws -> [String] {
+        var request = URLRequest(url: organizationsURL)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 401 { throw GitHubSignInError.notSignedIn }
+        guard status == 200 else { return [] }
+        return try JSONDecoder().decode([Organization].self, from: data).map(\.login)
+    }
 
     private struct CreatedRepository: Decodable {
         let cloneURL: String
@@ -128,8 +144,12 @@ extension GitHubAuthorization {
         struct Detail: Decodable { let message: String? }
     }
 
-    static func createRepository(name: String, isPrivate: Bool, token: String, session: URLSession) async throws -> String {
-        var request = URLRequest(url: repositoriesURL)
+    /// owner: An organization to create it in; the account's own without one.
+    static func createRepository(name: String, isPrivate: Bool, owner: String? = nil, token: String, session: URLSession) async throws -> String {
+        let url = owner.flatMap { owner in
+            owner.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed).flatMap { URL(string: "https://api.github.com/orgs/\($0)/repos") }
+        } ?? repositoriesURL
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
@@ -145,6 +165,10 @@ extension GitHubAuthorization {
             throw GitHubSignInError.repository(error?.errors?.first?.message ?? "A repository named \(name) already exists.")
         }
         if status == 401 { throw GitHubSignInError.notSignedIn }
+        if status == 403 || status == 404, let owner {
+            // An organization that hasn't approved the app, or one you can't create in.
+            throw GitHubSignInError.repository(error?.message ?? "You can't create repositories in \(owner).")
+        }
         throw GitHubSignInError.repository(error?.message ?? "GitHub couldn't create the repository (\(status)).")
     }
 }
