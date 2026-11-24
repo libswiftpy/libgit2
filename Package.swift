@@ -245,7 +245,7 @@ let package = Package(
 		.library(name: "SwiftPyGit", targets: ["SwiftPyGit"]),
 	],
 	dependencies: [
-		.package(url: "https://github.com/felfoldy/SwiftPy", from: "0.30.0"),
+		.package(path: "../SwiftPy"),
 	],
 	targets: [
 		.target(
