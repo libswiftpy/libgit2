@@ -14,8 +14,10 @@ import SwiftPy
 public enum SwiftPyGit {
     /// signInWithGitHub: Whether `github.sign_in()` is offered; it needs
     /// ``GitHubAccount/clientID`` and ``GitHubAccount/clientSecret``. A token already saved is used either way.
-    public static func initialize(signInWithGitHub: Bool = false) {
+    /// usesNetworkFramework: Connects through `NWConnection` instead of POSIX sockets, which an App Clip can't use.
+    public static func initialize(signInWithGitHub: Bool = false, usesNetworkFramework: Bool = false) {
         precondition(libgit2Initialized)
+        if usesNetworkFramework { NetworkStream.register() }
 
         PyBind.module("_pygit2", docs: "libgit2 for the pygit2 module; use pygit2 instead.") { module in
             module.class(Repo.self)
